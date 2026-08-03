@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ku" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سیستەمی AI - ناردنی ئاگاداری بۆ تێلیگرام</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #0d1117;
+            color: #ffffff;
+            text-align: center;
+            margin: 0;
+            padding: 15px;
+            user-select: none;
+        }
+        h2 { color: #58a6ff; margin-bottom: 5px; }
+
+        .dashboard {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            max-width: 680px;
+            margin: 10px auto;
+        }
+        .dash-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 10px;
+            flex: 1;
+        }
+        .dash-card h4 { margin: 0; color: #8b949e; font-size: 12px; }
+        .dash-card p { margin: 5px 0 0; font-size: 18px; font-weight: bold; color: #7ee787; }
+
+        .settings-panel {
+            max-width: 680px;
+            margin: 10px auto;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: right;
+            font-size: 13px;
+        }
+        .settings-panel h4 { margin: 0 0 8px 0; color: #58a6ff; }
+        .config-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+        .config-group label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+        .config-input {
+            width: 100%;
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: #fff;
+            margin-top: 4px;
+            direction: ltr;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 680px;
+            height: 480px;
+            margin: 10px auto;
+            border: 3px solid #238636;
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: #000000;
+            touch-action: none;
+            transition: border-color 0.3s;
+        }
+
+        #webcam, #canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            transition: filter 0.3s ease;
+        }
+
+        .night-mode-active {
+            filter: brightness(1.6) contrast(1.4) grayscale(0.2);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            max-width: 680px;
+            margin: 10px auto;
+        }
+        button {
+            background-color: #238636;
+            color: #ffffff;
+            border: none;
+            padding: 12px 18px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover { background-color: #2ea043; }
+        #clear-btn { background-color: #da3633; }
+        #clear-btn:hover { background-color: #f85149; }
+        #export-btn { background-color: #1f6beb; }
+        #night-btn { background-color: #6e40c9; }
+        #night-btn:hover { background-color: #8957e5; }
+        
+        #status { margin-top: 8px; font-size: 14px; color: #8b949e; }
+        
+        .report-section {
+            max-width: 680px;
+            margin: 15px auto;
+            background: #161b22;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            text-align: right;
+        }
+        #desc-log {
+            font-size: 14px;
+            color: #79c0ff;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        .log-item {
+            background: #0d1117;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            border-right: 4px solid #7ee787;
+        }
+        .log-item.breach {
+            border-right: 4px solid #ff7b72;
+            background: rgba(255, 123, 114, 0.1);
+        }
+        .log-item.smoke {
+            border-right: 4px solid #d29922;
+            background: rgba(210, 153, 34, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <h2>سیستەمی AI - ناردنی ئاگاداری بۆ تێلیگرام ✈️</h2>
+    <p style="color: #8b949e; font-size: 13px; margin-top: 0;">(ناوچەی قەدەغەکراو دیاری بکە بۆ ناردنی سەرپێچییەکان)</p>
+
+    <div class="settings-panel">
+        <h4>⚙️ ڕێکخستنی سیستەم و فلتەرەکان:</h4>
+        
+        <div style="margin-bottom: 10px;">
+            <label style="color: #7ee787; font-weight: bold;">🎥 هەڵبژاردنی کامێرا:</label>
+            <select id="camera-select" class="config-input" style="direction: rtl; cursor: pointer;">
+                <option value="">چاوەڕێی بارکردنی کامێراکان بکە...</option>
+            </select>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+            <label>Bot Token:</label>
+            <input type="password" id="tg-token" class="config-input" placeholder="توکنی بۆت تۆمار بکە...">
+            <label style="margin-top: 6px;">Chat ID:</label>
+            <input type="text" id="tg-chatid" class="config-input" placeholder="ئایدی چات تۆمار بکە...">
+        </div>
+
+        <div style="margin-bottom: 8px;"><b>تەنە ڕێگەپێدراوەکان بۆ ئاگادارکردنەوە:</b></div>
+        <div class="config-group" id="filter-checkboxes">
+            <label><input type="checkbox" value="person" checked> مرۆڤ</label>
+            <label><input type="checkbox" value="car" checked> سەیارە</label>
+            <label><input type="checkbox" value="motorcycle" checked> ماتۆڕسکیل</label>
+            <label><input type="checkbox" value="bus" checked> باص</label>
+            <label><input type="checkbox" value="truck" checked> بارهەڵگر</label>
+        </div>
+        <div style="margin-top: 8px;">
+            <label for="confidence-range">کەمترین ڕێژەی دڵنیایی (Confidence): <span id="conf-val">60%</span></label>
+            <input type="range" id="confidence-range" min="30" max="95" value="60" style="width: 100%;">
+        </div>
+
+        <div style="margin-top: 10px; border-top: 1px solid #30363d; padding-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+            <label><input type="checkbox" id="auto-night-checkbox" checked> چالاککردنی خۆکارانەی مۆدی شەو 🌙</label>
+            <label><input type="checkbox" id="smoke-detect-checkbox" checked> چالاککردنی دیاریکردنی دووکەڵ 💨</label>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <div class="dash-card">
+            <h4>ژمارەی بینراوەکان</h4>
+            <p id="total-count">0</p>
+        </div>
+        <div class="dash-card">
+            <h4>بارودۆخی ئاسایش</h4>
+            <p id="security-status" style="color: #7ee787;">ئاسایی</p>
+        </div>
+        <div class="dash-card">
+            <h4>مۆدی بینین</h4>
+            <p id="night-status" style="color: #e3b341;">ڕۆژ ☀️</p>
+        </div>
+    </div>
+
+    <div class="video-container" id="video-box">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <button id="start-btn">داگیرساندنی کامێرا</button>
+        <button id="night-btn">🌙 مۆدی شەو (دەستی)</button>
+        <button id="clear-btn">سڕینەوەی ناوچەکە</button>
+        <button id="export-btn">📥 داگرتنی ڕاپۆرتی Excel</button>
+    </div>
+    <p id="status">چاوەڕوانی باربوونی مۆدێلی AI...</p>
+
+    <div class="report-section">
+        <h3>📝 ڕاپۆرتی ڕاستەوخۆ:</h3>
+        <div id="desc-log">چاوەڕوانی چالاککردن...</div>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const nightBtn = document.getElementById('night-btn');
+        const cameraSelect = document.getElementById('camera-select');
+        const statusText = document.getElementById('status');
+        const totalCountText = document.getElementById('total-count');
+        const securityStatus = document.getElementById('security-status');
+        const nightStatus = document.getElementById('night-status');
+        const descLog = document.getElementById('desc-log');
+        const confRange = document.getElementById('confidence-range');
+        const confVal = document.getElementById('conf-val');
+        const autoNightCheckbox = document.getElementById('auto-night-checkbox');
+        const smokeDetectCheckbox = document.getElementById('smoke-detect-checkbox');
+
+        let aiModel = null;
+        let lastSnapTime = 0;
+        let lastSmokeAlertTime = 0;
+        let trackingHistory = {};
+        let masterDatabase = [];
+        let currentStream = null;
+
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+        let dangerZone = null;
+        let isNightMode = false;
+
+        const categoryTranslation = {
+            'person': 'مرۆڤ (کەس)',
+            'car': 'سەیارە',
+            'motorcycle': 'ماتۆڕسکیل',
+            'bus': 'باص',
+            'truck': 'بارهەڵگر',
+            'bicycle': 'پاسکیل',
+            'dog': 'سەگ',
+            'cat': 'پشیلە'
+        };
+
+        async function getAvailableCameras() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                cameraSelect.innerHTML = '';
+                if (videoDevices.length === 0) {
+                    cameraSelect.innerHTML = '<option value="">هیچ کامێرایەک نەدۆزرایەوە</option>';
+                    return;
+                }
+
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `کامێرای ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+            } catch (err) {
+                console.error("هەڵە لە بەدەستهێنانی کامێراکان:", err);
+            }
+        }
+
+        window.addEventListener('load', () => {
+            const savedZone = localStorage.getItem('savedDangerZone');
+            if (savedZone) dangerZone = JSON.parse(savedZone);
+
+            const savedToken = localStorage.getItem('tgToken');
+            const savedChatId = localStorage.getItem('tgChatId');
+            if (savedToken) document.getElementById('tg-token').value = savedToken;
+            if (savedChatId) document.getElementById('tg-chatid').value = savedChatId;
+
+            getAvailableCameras();
+        });
+
+        document.getElementById('tg-token').addEventListener('change', (e) => localStorage.setItem('tgToken', e.target.value));
+        document.getElementById('tg-chatid').addEventListener('change', (e) => localStorage.setItem('tgChatId', e.target.value));
+
+        confRange.addEventListener('input', (e) => {
+            confVal.innerText = e.target.value + "%";
+        });
+
+        nightBtn.addEventListener('click', () => {
+            setNightMode(!isNightMode);
+        });
+
+        function setNightMode(enable) {
+            isNightMode = enable;
+            if (isNightMode) {
+                video.classList.add('night-mode-active');
+                canvas.classList.add('night-mode-active');
+                nightStatus.innerText = "شەو 🌙";
+                nightStatus.style.color = "#a5d6ff";
+            } else {
+                video.classList.remove('night-mode-active');
+                canvas.classList.remove('night-mode-active');
+                nightStatus.innerText = "ڕۆژ ☀️";
+                nightStatus.style.color = "#e3b341";
+            }
+        }
+
+        function checkAutoNightMode() {
+            if (!autoNightCheckbox.checked || !video.videoWidth) return;
+            
+            const sampleCanvas = document.createElement('canvas');
+            sampleCanvas.width = 80;
+            sampleCanvas.height = 60;
+            const sCtx = sampleCanvas.getContext('2d');
+            sCtx.drawImage(video, 0, 0, 80, 60);
+            
+            const imageData = sCtx.getImageData(0, 0, 80, 60);
+            const data = imageData.data;
+            let colorSum = 0;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+                colorSum += avg;
+            }
+
+            const brightness = colorSum / (data.length / 4);
+
+            if (brightness < 50 && !isNightMode) {
+                setNightMode(true);
+            } else if (brightness >= 65 && isNightMode) {
+                setNightMode(false);
+            }
+        }
+
+        function checkSmokeInZone() {
+            if (!smokeDetectCheckbox.checked || !dangerZone || dangerZone.width < 10 || dangerZone.height < 10) return false;
+
+            try {
+                const zX = Math.max(0, Math.floor(dangerZone.x));
+                const zY = Math.max(0, Math.floor(dangerZone.y));
+                const zW = Math.min(canvas.width - zX, Math.floor(dangerZone.width));
+                const zH = Math.min(canvas.height - zY, Math.floor(dangerZone.height));
+
+                if (zW <= 0 || zH <= 0) return false;
+
+                const zoneImageData = ctx.getImageData(zX, zY, zW, zH);
+                const data = zoneImageData.data;
+                let smokePixels = 0;
+                let totalPixels = data.length / 4;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i+1];
+                    const b = data[i+2];
+
+                    const maxDiff = Math.max(Math.abs(r - g), Math.abs(g - b), Math.abs(r - b));
+                    const avgBrightness = (r + g + b) / 3;
+
+                    if (maxDiff < 15 && avgBrightness > 120 && avgBrightness < 235) {
+                        smokePixels++;
+                    }
+                }
+
+                const smokeRatio = smokePixels / totalPixels;
+                return smokeRatio > 0.40;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function getFormattedDateTime() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-CA');
+            const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+            return { dateStr, timeStr };
+        }
+
+        async function sendToTelegram(blobData, messageText) {
+            const token = document.getElementById('tg-token').value.trim();
+            const chatId = document.getElementById('tg-chatid').value.trim();
+
+            if (!token || !chatId) {
+                console.warn("تکایە Token و Chat ID بنووسە!");
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('chat_id', chatId);
+                formData.append('caption', messageText);
+                formData.append('parse_mode', 'HTML');
+                formData.append('photo', blobData, 'alert.png');
+
+                fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (err) {
+                console.error("هەڵە لە ناردن بۆ تێلیگرام:", err);
+            }
+        }
+
+        function recordBreachSnapshot(detectedType, speed, directionText, accuracy) {
+            const now = Date.now();
+            if (now - lastSnapTime < 5000) return;
+            lastSnapTime = now;
+
+            const { dateStr, timeStr } = getFormattedDateTime();
+
+            const tgCaption = `🚨 <b>ئاگاداری سەرپێچی ناوچەی قەدەغەکراو!</b>\n\n` +
+                              `🔎 <b>تەن:</b> ${detectedType}\n` +
+                              `🎯 <b>ڕێژەی دڵنیایی:</b> %${accuracy}\n` +
+                              `🧭 <b>ئاراستە:</b> ${directionText}\n` +
+                              `⚡ <b>خێرایی:</b> ${speed} px/s\n` +
+                              `🌙 <b>مۆدی بینین:</b> ${isNightMode ? 'شەو (Night Mode)' : 'ڕۆژ'}\n` +
+                              `📅 <b>بەروار:</b> ${dateStr}\n` +
+                              `⏱️ <b>کات:</b> ${timeStr}`;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth || 640;
+            tempCanvas.height = video.videoHeight || 480;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            if (isNightMode) tempCtx.filter = 'brightness(1.6) contrast(1.4) grayscale(0.2)';
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            tempCanvas.toBlob((blob) => {
+                sendToTelegram(blob, tgCaption);
+            }, 'image/png');
+        }
+
+        function sendSmokeAlert() {
+            const now = Date.now();
+            if (now - lastSmokeAlertTime < 10000) return;
+            lastSmokeAlertTime = now;
+
+            const { dateStr, timeStr } = getFormattedDateTime();
+            const caption = `💨 <b>ئاگاداری: دووکەڵ یان تەم لە ناوچەی قەدەغەکراو بەدیکرا!</b>\n\n` +
+                            `⚠️ <b>ئاگاداربە!</b> بڕێکی زۆر لە دووکەڵ لە زۆنەکەدا هەیە.\n` +
+                            `📅 <b>بەروار:</b> ${dateStr}\n` +
+                            `⏱️ <b>کات:</b> ${timeStr}`;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth || 640;
+            tempCanvas.height = video.videoHeight || 480;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            tempCanvas.toBlob((blob) => {
+                sendToTelegram(blob, caption);
+            }, 'image/png');
+        }
+
+        exportBtn.addEventListener('click', () => {
+            if (masterDatabase.length === 0) return alert("هیچ زانیارییەک نییە بۆ داگرتن!");
+            let csvContent = "\uFEFFژمارە,تەن,بارودۆخ,بەروار,کات,ئاراستە,خێرایی,مۆدی شەو\n";
+            masterDatabase.forEach((row, i) => {
+                csvContent += `${i + 1},"${row.type}","${row.status}","${row.date}","${row.time}","${row.direction}","${row.speed}","${row.isNight}"\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `AI_Report_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        });
+
+        function getCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const coords = getCoords(e);
+            startX = coords.x; startY = coords.y;
+            dangerZone = { x: startX, y: startY, width: 0, height: 0 };
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const coords = getCoords(e);
+            dangerZone = {
+                x: Math.min(startX, coords.x),
+                y: Math.min(startY, coords.y),
+                width: Math.abs(coords.x - startX),
+                height: Math.abs(coords.y - startY)
+            };
+        }
+
+        function stopDrawing() { 
+            isDrawing = false; 
+            if (dangerZone) {
+                localStorage.setItem('savedDangerZone', JSON.stringify(dangerZone));
+            }
+        }
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', stopDrawing);
+
+        clearBtn.addEventListener('click', () => { 
+            dangerZone = null; 
+            localStorage.removeItem('savedDangerZone');
+        });
+
+        async function initAI() {
+            try {
+                statusText.innerText = "چاوەڕێ بکە... مۆدێلەکە باردەکرێت...";
+                aiModel = await cocoSsd.load();
+                statusText.innerText = "مۆدێلی AI ئامادەیە!";
+            } catch (err) {
+                statusText.innerText = "هەڵە لە بارکردنی مۆدێلەکە.";
+            }
+        }
+        initAI();
+
+        async function startCamera() {
+            if (!aiModel) return alert("چاوەڕێی بارکردنی مۆدێل بکە!");
+
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            const selectedDeviceId = cameraSelect.value;
+            const constraints = {
+                video: selectedDeviceId 
+                    ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
+                    : { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false
+            };
+
+            try {
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    canvas.width = video.videoWidth || 640;
+                    canvas.height = video.videoHeight || 480;
+                    getAvailableCameras(); // نوێکردنەوەی ناوی کامێراکان دوای دانانی مۆڵەت
+                    runAISystem();
+                };
+            } catch (err) { alert("کامێرا نەکرایەوە!"); }
+        }
+
+        startBtn.addEventListener('click', startCamera);
+        cameraSelect.addEventListener('change', () => {
+            if (currentStream) startCamera();
+        });
+
+        function getSelectedCategories() {
+            const checkboxes = document.querySelectorAll('#filter-checkboxes input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        async function runAISystem() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            checkAutoNightMode();
+
+            const isSmokeDetected = checkSmokeInZone();
+            if (isSmokeDetected) {
+                sendSmokeAlert();
+            }
+
+            const predictions = await aiModel.detect(video);
+            let detectedCount = 0;
+            let isZoneBreached = false;
+            let currentLogs = [];
+            const nowTime = Date.now();
+            const { dateStr, timeStr } = getFormattedDateTime();
+
+            const selectedCategories = getSelectedCategories();
+            const minConfidence = parseInt(confRange.value) / 100;
+
+            predictions.forEach((pred, index) => {
+                const accuracy = Math.round(pred.score * 100);
+
+                if (selectedCategories.includes(pred.class) && pred.score >= minConfidence) {
+                    detectedCount++;
+                    const kurdishName = categoryTranslation[pred.class] || pred.class;
+                    const [x, y, width, height] = pred.bbox;
+                    const centerX = x + (width / 2);
+                    const centerY = y + (height / 2);
+                    const objId = pred.class + "_" + index;
+
+                    if (!trackingHistory[objId]) trackingHistory[objId] = [];
+                    trackingHistory[objId].push({ x: centerX, y: centerY, time: nowTime });
+                    if (trackingHistory[objId].length > 15) trackingHistory[objId].shift();
+
+                    const history = trackingHistory[objId];
+                    let speed = 0, directionText = "وەستاوە", dx = 0, dy = 0;
+
+                    if (history.length >= 2) {
+                        const first = history[0];
+                        const last = history[history.length - 1];
+                        dx = last.x - first.x;
+                        dy = last.y - first.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const timeDiff = (last.time - first.time) / 1000;
+                        if (timeDiff > 0) speed = Math.round(distance / timeDiff);
+
+                        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                            directionText = Math.abs(dx) > Math.abs(dy)
+                                ? (dx > 0 ? "بەرەو ڕاست ➡️" : "بەرەو چەپ ⬅️")
+                                : (dy > 0 ? "بەرەو خوارەوە ⬇️" : "بەرەو سەرەوە ⬆️");
+                        }
+                    }
+
+                    const inDangerZone = (dangerZone && dangerZone.width > 10 && dangerZone.height > 10) &&
+                        (centerX >= dangerZone.x && centerX <= (dangerZone.x + dangerZone.width) &&
+                         centerY >= dangerZone.y && centerY <= (dangerZone.y + dangerZone.height));
+
+                    if (inDangerZone) {
+                        isZoneBreached = true;
+                        recordBreachSnapshot(kurdishName, speed, directionText, accuracy);
+                    }
+
+                    masterDatabase.push({
+                        type: kurdishName, status: inDangerZone ? "سەرپێچی" : "ئاسایی",
+                        date: dateStr, time: timeStr, direction: directionText, speed: speed,
+                        isNight: isNightMode ? "بەڵێ" : "نەخێر"
+                    });
+
+                    ctx.strokeStyle = inDangerZone ? '#ff7b72' : '#7ee787';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x, y, width, height);
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 13px Arial';
+                    ctx.fillText(`${kurdishName} (%${accuracy})`, x, y > 15 ? y - 5 : 15);
+
+                    currentLogs.push(`
+                        <div class="log-item ${inDangerZone ? 'breach' : ''}">
+                            <b>${kurdishName}</b> - ${directionText} | ⚡ ${speed} px/s ${inDangerZone ? '🚨 [سەرپێچی]' : ''}
+                        </div>
+                    `);
+                }
+            });
+
+            if (isSmokeDetected) {
+                currentLogs.unshift(`
+                    <div class="log-item smoke">
+                        <b>💨 ئاگاداری دووکەڵ:</b> هەبوونی دووکەڵ/تەم تۆمارکرا!
+                    </div>
+                `);
+            }
+
+            if (dangerZone && dangerZone.width > 5) {
+                ctx.strokeStyle = isSmokeDetected ? '#d29922' : (isZoneBreached ? '#ff7b72' : 'rgba(255, 0, 0, 0.7)');
+                ctx.lineWidth = 2;
+                ctx.strokeRect(dangerZone.x, dangerZone.y, dangerZone.width, dangerZone.height);
+            }
+
+            totalCountText.innerText = detectedCount;
+            securityStatus.innerText = isSmokeDetected ? "💨 دووکەڵ!" : (isZoneBreached ? "🚨 بەزێنرا!" : "ئاسایی");
+            securityStatus.style.color = isSmokeDetected ? "#d29922" : (isZoneBreached ? "#ff7b72" : "#7ee787");
+
+            if (currentLogs.length > 0) descLog.innerHTML = currentLogs.join("");
+
+            requestAnimationFrame(runAISystem);
+        }
+    </script>
+</body>
+</html>
