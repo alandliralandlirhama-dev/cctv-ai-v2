@@ -877,83 +877,89 @@ function setENHANCERestrictedZone() {
 }
 
 window.addEventListener("load", setENHANCERestrictedZone);
- // ==========================================
-// SMART ZONE FILTER (BLOCK ALARM FOR OWNER)
+// ==========================================
+// MASTER ZONE & FACE INTERRUPTER ENGINE
 // ==========================================
 
-let isOwnerSaved = false;
+let isOwnerCaptured = false;
 let ownerImageData = null;
 
-// 1. ڕێکخستنی دوگمەی تۆمارکردنی دەموچاو
-window.addEventListener("load", () => {
+// 1. دروستکردنی دوگمەی شین لە گۆشەی چەپ
+window.addEventListener("DOMContentLoaded", () => {
+  initOwnerFaceBtn();
+});
+if (document.readyState === "complete" || document.readyState === "interactive") {
+  initOwnerFaceBtn();
+}
+
+function initOwnerFaceBtn() {
   if (document.getElementById("btnSaveMyFace")) return;
 
   const btn = document.createElement("button");
   btn.id = "btnSaveMyFace";
   btn.innerHTML = "📸 تۆمارکردنی دەموچاوی خۆم";
-  btn.style.cssText = "position: fixed; bottom: 20px; left: 20px; z-index: 999999; padding: 14px 24px; background: #0284c7; color: #ffffff; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);";
+  btn.style.cssText = "position: fixed; bottom: 20px; left: 20px; z-index: 9999999; padding: 14px 22px; background: #0284c7; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);";
 
   btn.onclick = () => {
     const video = document.querySelector("video");
     if (!video || video.readyState !== 4) {
-      alert("تکایە بوەستە تا کامێراکە بە تەواوی ڕوون دەبێتەوە!");
+      alert("تکایە بوەستە تا کامێراکە چالاک دەبێت!");
       return;
     }
 
     const canvas = document.createElement("canvas");
-    canvas.width = 160;
-    canvas.height = 120;
+    canvas.width = 100;
+    canvas.height = 100;
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, 160, 120);
+    ctx.drawImage(video, 0, 0, 100, 100);
 
-    ownerImageData = ctx.getImageData(0, 0, 160, 120).data;
-    isOwnerSaved = true;
+    ownerImageData = ctx.getImageData(0, 0, 100, 100).data;
+    isOwnerCaptured = true;
 
     btn.innerHTML = "✅ دەموچاوت تۆمارکرا";
     btn.style.background = "#16a34a";
-    alert("دەموچاوت تۆمارکرا! لەمەودوا ئەگەر بچیتە ناوچەی قەدەخەکراوەوە وێنەت ناگیرێت.");
+    alert("دەموچاوت بە سەرکەوتوویی ناسێنرا! لەمەودوا چوونی تۆ بۆ ناوچەی قەدەخەکراو وێنە ناگرێت.");
   };
 
   document.body.appendChild(btn);
-  overrideAlertSystem();
-});
-
-// 2. دەستکاری سێنتراڵی ئاگادارییەکان بۆ پەکخستنی ئەلارمی خۆت
-function overrideAlertSystem() {
-  const originalHandleAlerts = window.handleAlerts;
-
-  window.handleAlerts = function(message, type) {
-    const video = document.querySelector("video");
-
-    // ئەگەر دەموچاوت تۆمار کردبێت و ڕووداوەکە لە ناوچەی قەدەخەکراو یان کەس بێت
-    if (isOwnerSaved && ownerImageData && video && video.readyState === 4) {
-      const currentCanvas = document.createElement("canvas");
-      currentCanvas.width = 160;
-      currentCanvas.height = 120;
-      const ctx = currentCanvas.getContext("2d");
-      ctx.drawImage(video, 0, 0, 160, 120);
-      const currentData = ctx.getImageData(0, 0, 160, 120).data;
-
-      // بەراوردکردنی ڕووکاری ئێستای کامێراکە لەگەڵ دەموچاوە تۆمارکراوەکە
-      let diff = 0;
-      for (let i = 0; i < currentData.length; i += 16) {
-        diff += Math.abs(currentData[i] - ownerImageData[i]);
-      }
-      let avgDiff = diff / (currentData.length / 16);
-
-      // ئەگەر خۆت بوویت (چوونیەک بوون) -> ناردنی وێنە و ئەلارم بوەستێنە!
-      if (avgDiff < 35) {
-        console.log("🛑 ئاگاداری ڕاگێرا: خۆتیت کە لە بەردەم کامێراکە یان ناوچەی قەدەخەکراویت.");
-        return; 
-      }
-    }
-
-    // ئەگەر کەسێکی تر بوو -> کۆدی ڕەسەنی ئاگادارکردنەوە و ناردنی وێنە ئیش بکات
-    if (typeof originalHandleAlerts === 'function') {
-      originalHandleAlerts(message, type);
-    }
-  };
 }
+
+// 2. بلۆککردنی وێنەگرتن کاتێک خۆت لە بەردەم کامێرا یان ناوچەی قەدەخەکراویت
+const originalDrawCanvas = window.drawCanvas || function(){};
+setInterval(() => {
+  const video = document.querySelector("video");
+  if (isOwnerCaptured && ownerImageData && video && video.readyState === 4) {
+    const currentCanvas = document.createElement("canvas");
+    currentCanvas.width = 100;
+    currentCanvas.height = 100;
+    const ctx = currentCanvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, 100, 100);
+    const currentData = ctx.getImageData(0, 0, 100, 100).data;
+
+    let diff = 0;
+    for (let i = 0; i < currentData.length; i += 8) {
+      diff += Math.abs(currentData[i] - ownerImageData[i]);
+    }
+    let avgDiff = diff / (currentData.length / 8);
+
+    // ئەگەر جیاوازییەکە کەم بوو (واتە خۆتیت)، لێدان و ناردنی ئاگاداری ڕادەگرێت
+    if (avgDiff < 40) {
+      window.isOwnerInFrame = true; // نیشانەی ئەوەی خاوەنەکەی لە کادرەکەیە
+    } else {
+      window.isOwnerInFrame = false;
+    }
+  }
+}, 500);
+
+// ڕێگریکردن لە ناردنی ڕەسم بۆ تێگرام کاتێک خاوەنەکەی دیارە
+const origFetch = window.fetch;
+window.fetch = function() {
+  if (window.isOwnerInFrame && arguments[0] && arguments[0].includes("sendPhoto")) {
+    console.log("🛑 وێنەگرتن و ناردن ڕاوەستێنرا چونکە خاوەنی سیستەم لە ناوچەکەیە.");
+    return Promise.resolve(new Response(JSON.stringify({ ok: true })));
+  }
+  return origFetch.apply(this, arguments);
+};
     </script>
 </body>
 </html>
