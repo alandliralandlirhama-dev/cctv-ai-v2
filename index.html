@@ -685,15 +685,32 @@
 
             requestAnimationFrame(runAISystem);
         }
-        // ==========================================
-// TELEGRAM REMOTE CONTROL (سەربەخۆ)
+      // ==========================================
+// TELEGRAM REMOTE CONTROL (خوێندنەوە لە شاشەکەوە)
 // ==========================================
 let lastUpdateId = 0;
 let isAlarmActive = true;
 
-// فەنکشنی پشکنینی پەیامە هاتوەکان لە تێگرامەوە
 async function checkTelegramCommands() {
-  const token = "YOUR_BOT_TOKEN"; // توکنی بڵاوکراوەی تێگرامەکەت
+  // خوێندنەوەی Bot Token و Chat ID لە Inputەکانی سەر شاشەکەت
+  const inputs = document.querySelectorAll('input');
+  let token = "";
+  let chatIdFromInput = "";
+
+  inputs.forEach(input => {
+    // دۆزینەوەی Chat ID
+    if (input.value.trim() === "949718113" || input.placeholder?.includes("Chat ID")) {
+      chatIdFromInput = input.value.trim();
+    } 
+    // دۆزینەوەی Bot Token
+    else if (input.type === "password" || input.value.length > 25) {
+      token = input.value.trim();
+    }
+  });
+
+  // ئەگەر توکنەکە لەسەر شاشەکە نەبوو، راوەستە
+  if (!token) return;
+
   const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${lastUpdateId + 1}`;
 
   try {
@@ -704,7 +721,7 @@ async function checkTelegramCommands() {
       data.result.forEach((update) => {
         lastUpdateId = update.update_id;
         const text = update.message ? update.message.text : "";
-        const chatId = update.message ? update.message.chat.id : "";
+        const chatId = update.message ? update.message.chat.id : chatIdFromInput;
 
         // 1. فەرمانی وێنەگرتنی ڕاستەوخۆ (/status)
         if (text === "/status") {
@@ -723,16 +740,18 @@ async function checkTelegramCommands() {
       });
     }
   } catch (error) {
-    console.error("کێشە لە وەگرتنی فەرمانی تێگرام:", error);
+    console.error("کێشە لە وەرگرتنی فەرمانی تێگرام:", error);
   }
 }
 
 // ناردنی وێنەی ڕاستەوخۆ
 function sendSnapshotToTelegram(chatId, token) {
   const video = document.querySelector("video");
+  if (!video) return;
+
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
   const ctx = canvas.getContext("2d");
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
@@ -740,6 +759,7 @@ function sendSnapshotToTelegram(chatId, token) {
     const formData = new FormData();
     formData.append("chat_id", chatId);
     formData.append("photo", blob, "status.jpg");
+    formData.append("caption", "📸 وێنەی ڕاستەوخۆی کامێرا");
 
     fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: "POST",
@@ -748,12 +768,12 @@ function sendSnapshotToTelegram(chatId, token) {
   }, "image/jpeg");
 }
 
-// ناردنی پەیامی ئاسایی
+// ناردنی پەیامی دەقی
 function sendTelegramMessage(chatId, token, msg) {
   fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(msg)}`);
 }
 
-// پشکنین هەر 3 چەرکە جارێک بۆ فەرمانی نوێ
+// پشکنین هەر 3 چەرکە جارێک
 setInterval(checkTelegramCommands, 3000);
     </script>
 </body>
