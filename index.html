@@ -877,6 +877,98 @@ function setENHANCERestrictedZone() {
 }
 
 window.addEventListener("load", setENHANCERestrictedZone);
+        // ==========================================
+// EASY FACE CAPTURE & RECOGNITION (بێ پێویستی بە لینک)
+// ==========================================
+
+let myFaceMatcher = null;
+
+// 1. بارکردنی کتێبخانەی دەموچاو
+(function loadFaceApiScript() {
+  const script = document.createElement("script");
+  script.src = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js";
+  script.onload = () => {
+    initFaceApiModels();
+  };
+  document.head.appendChild(script);
+})();
+
+async function initFaceApiModels() {
+  try {
+    const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model";
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    console.log("✅ مۆدێلەکانی دەموچاو بارکران");
+    createCaptureButton();
+  } catch (err) {
+    console.log("کێشە لە بارکردنی مۆدێلەکە:", err);
+  }
+}
+
+// 2. دروستکردنی دوگمەیەک لەسەر شاشەکە بۆ تۆمارکردنی دەموچاو
+function createCaptureButton() {
+  if (document.getElementById("btnCaptureFace")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "btnCaptureFace";
+  btn.innerText = "📸 تۆمارکردنی دەموچاوی خۆم";
+  btn.style.cssText = "position: fixed; bottom: 20px; left: 20px; z-index: 9999; padding: 12px 20px; background: #008cba; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3);";
+  
+  btn.onclick = async () => {
+    const video = document.querySelector("video");
+    if (!video) return alert("کامێراکە چالاک نییە!");
+
+    btn.innerText = "⏳ لە حاڵەتی شیکاریکردندایە...";
+    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+
+    if (detection) {
+      const labeledDescriptor = new faceapi.LabeledFaceDescriptors("Owner", [detection.descriptor]);
+      myFaceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
+      btn.innerText = "✅ دەموچاوت تۆمارکرا!";
+      btn.style.background = "#4CAF50";
+      alert("دەموچاوت بە سەرکەوتوویی ناسێنرا! لەمەودوا ئەگەر بێیتە بەر کامێراکە ئەلارم لێنادات.");
+    } else {
+      btn.innerText = "📸 تۆمارکردنی دەموچاوی خۆم";
+      alert("❌ هیچ دەموچاوێک لە بەردەم کامێراکە نادۆزرایەوە، تکایە ڕاستەوخۆ بەرامبەر کامێراکە بوەستە و دووبارەی بکەرەوە.");
+    }
+  };
+
+  document.body.appendChild(btn);
+  startFaceMonitoring();
+}
+
+// 3. پشکنینی بەردەوامی دەموچاوەکان
+function startFaceMonitoring() {
+  const video = document.querySelector("video");
+  setInterval(async () => {
+    if (video && video.readyState === 4 && typeof faceapi !== 'undefined') {
+      const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+
+      if (detections.length > 0) {
+        detections.forEach(detection => {
+          let identity = "Unknown";
+
+          if (myFaceMatcher) {
+            const match = myFaceMatcher.findBestMatch(detection.descriptor);
+            identity = match.label;
+          }
+
+          // ئەگەر کەسەکە نەناسراو بوو -> ئەلارم لێدەدات
+          if (identity === "unknown" || identity.includes("unknown")) {
+            console.warn("🚨 کەسێکی نەناسراو لە بەردەم کامێرا بەدیکرا!");
+            if (typeof handleAlerts === 'function') {
+              handleAlerts("🚨 ئاگاداری: دەموچاوێکی نەناسراو بینرا!", "face");
+            }
+          } else {
+            // ئەگەر خۆت بوویت (Owner) -> بێدەنگ دەبێت
+            console.log("✅ خاوەنی سیستەمەکە (Owner) بینرا.");
+          }
+        });
+      }
+    }
+  }, 1500);
+}
     </script>
 </body>
 </html>
