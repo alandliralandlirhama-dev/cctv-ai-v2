@@ -685,6 +685,76 @@
 
             requestAnimationFrame(runAISystem);
         }
+        // ==========================================
+// TELEGRAM REMOTE CONTROL (سەربەخۆ)
+// ==========================================
+let lastUpdateId = 0;
+let isAlarmActive = true;
+
+// فەنکشنی پشکنینی پەیامە هاتوەکان لە تێگرامەوە
+async function checkTelegramCommands() {
+  const token = "YOUR_BOT_TOKEN"; // توکنی بڵاوکراوەی تێگرامەکەت
+  const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${lastUpdateId + 1}`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.ok && data.result.length > 0) {
+      data.result.forEach((update) => {
+        lastUpdateId = update.update_id;
+        const text = update.message ? update.message.text : "";
+        const chatId = update.message ? update.message.chat.id : "";
+
+        // 1. فەرمانی وێنەگرتنی ڕاستەوخۆ (/status)
+        if (text === "/status") {
+          sendSnapshotToTelegram(chatId, token);
+        }
+        // 2. فەرمانی وەستاندنی ئاگاداری (/stop)
+        else if (text === "/stop") {
+          isAlarmActive = false;
+          sendTelegramMessage(chatId, token, "🛑 سیستەمەکە بۆ ماوەیەک ڕاوەستا.");
+        }
+        // 3. فەرمانی چالاککردنەوە (/start)
+        else if (text === "/start") {
+          isAlarmActive = true;
+          sendTelegramMessage(chatId, token, "✅ سیستەمەکە دووبارە چالاک بووەوە.");
+        }
+      });
+    }
+  } catch (error) {
+    console.error("کێشە لە وەگرتنی فەرمانی تێگرام:", error);
+  }
+}
+
+// ناردنی وێنەی ڕاستەوخۆ
+function sendSnapshotToTelegram(chatId, token) {
+  const video = document.querySelector("video");
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  canvas.toBlob((blob) => {
+    const formData = new FormData();
+    formData.append("chat_id", chatId);
+    formData.append("photo", blob, "status.jpg");
+
+    fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+      method: "POST",
+      body: formData
+    });
+  }, "image/jpeg");
+}
+
+// ناردنی پەیامی ئاسایی
+function sendTelegramMessage(chatId, token, msg) {
+  fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(msg)}`);
+}
+
+// پشکنین هەر 3 چەرکە جارێک بۆ فەرمانی نوێ
+setInterval(checkTelegramCommands, 3000);
     </script>
 </body>
 </html>
