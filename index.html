@@ -960,6 +960,280 @@ window.fetch = function() {
   }
   return origFetch.apply(this, arguments);
 };
+        <!DOCTYPE html>
+<html lang="ckb" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCTV AI Security System</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: white;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+
+        /* تیژکردنەوە و ڕووناککردنەوەی وێنەی کامێرا لێڵەکە */
+        video {
+            width: 100%;
+            max-width: 800px;
+            border-radius: 10px;
+            filter: contrast(125%) brightness(110%);
+            -webkit-filter: contrast(125%) brightness(110%);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: move; /* ئاماژەیەک کە دەتوانیت ناوچەکە بە ماوس ڕابکێشیت */
+        }
+
+        .status {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .telegram-config {
+            margin: 15px 0;
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        input {
+            padding: 8px;
+            margin: 5px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            background: #222;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>🎥 سیستەمی چاودێری زیرەکی دەستکرد (CCTV AI)</h2>
+
+    <!-- بەشی ڕێکخستنی تەلەگرام -->
+    <div class="telegram-config">
+        <input type="text" id="botToken" placeholder="Telegram Bot Token">
+        <input type="text" id="chatID" placeholder="Telegram Chat ID">
+    </div>
+
+    <br>
+
+    <div class="container">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="status" id="statusText">بارکردنی مۆدێلەکان...</div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('statusText');
+
+        let model;
+        let lastAlertTime = 0;
+
+        // ناوچەی قەدەخەکراو (دەتوانیت بە ماوس لەسەر شاشە بیجوڵێنیت)
+        let forbiddenZone = { x: 50, y: 50, width: 200, height: 200 };
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // 1. ڕێکخستنی کامێرا بە کوالێتی بەرز
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        facingMode: "environment"
+                    },
+                    audio: false
+                });
+                video.srcObject = stream;
+
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        resolve(video);
+                    };
+                });
+            } catch (err) {
+                statusText.innerText = "کێشە لە کامێرا ڕووی دا!";
+            }
+        }
+
+        // 2. لۆجیکی جوڵاندنی ناوچەی قەدەخەکراو بە ماوس/پەنجە
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+            if (mouseX >= forbiddenZone.x && mouseX <= forbiddenZone.x + forbiddenZone.width &&
+                mouseY >= forbiddenZone.y && mouseY <= forbiddenZone.y + forbiddenZone.height) {
+                isDragging = true;
+                dragOffsetX = mouseX - forbiddenZone.x;
+                dragOffsetY = mouseY - forbiddenZone.y;
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+                forbiddenZone.x = mouseX - dragOffsetX;
+                forbiddenZone.y = mouseY - dragOffsetY;
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => { isDragging = false; });
+
+        // 3. پشکنینی پۆشینی ناوچە
+        function isInsideForbiddenZone(box, zone) {
+            let boxLeft = box[0];
+            let boxRight = box[0] + box[2];
+            let boxTop = box[1];
+            let boxBottom = box[1] + box[3];
+
+            return !(boxRight < zone.x || 
+                     boxLeft > zone.x + zone.width || 
+                     boxBottom < zone.y || 
+                     boxTop > zone.y + zone.height);
+        }
+
+        // 4. ناردنی وێنە بۆ تەلەگرام کاتێک کەسێک لە دەرەوەی ناوچەکەیە
+        function sendTelegramPhoto(imageData) {
+            const token = document.getElementById('botToken').value;
+            const chatId = document.getElementById('chatID').value;
+
+            if (!token || !chatId) return;
+
+            // ڕێگری لە ناردنی دووبارە لە ماوەی ۱۰ چڕکەدا
+            const now = Date.now();
+            if (now - lastAlertTime < 10000) return; 
+            lastAlertTime = now;
+
+            fetch(imageData)
+                .then(res => res.blob())
+                .then(blob => {
+                    const formData = new FormData();
+                    formData.append('chat_id', chatId);
+                    formData.append('photo', blob, 'alert.jpg');
+                    formData.append('caption', '⚠️ ئاگاداربە! کەسێک لە دەرەوەی ناوچەی ڕێگەپێدراو دەستنیشانکرا.');
+
+                    fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                });
+        }
+
+        // 5. پشکنینی سەرەکی (بینینی دوور + جیاکردنەوەی سەوز/سور)
+        async function detectObjects() {
+            // ئاستی وریایی کەمکراوەتەوە بۆ 0.22 تا لە دوورەوە کەسەکان بدۆزێتەوە
+            const predictions = await model.detect(video, 20, 0.22);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // کێشانی ناوچەی قەدەخەکراو (پرتەقاڵی پچڕ پچڕ)
+            ctx.strokeStyle = "rgba(255, 165, 0, 0.8)";
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 6]);
+            ctx.strokeRect(forbiddenZone.x, forbiddenZone.y, forbiddenZone.width, forbiddenZone.height);
+            ctx.setLineDash([]);
+            ctx.fillStyle = "rgba(255, 165, 0, 0.15)";
+            ctx.fillRect(forbiddenZone.x, forbiddenZone.y, forbiddenZone.width, forbiddenZone.height);
+
+            let triggerTelegram = false;
+
+            predictions.forEach(prediction => {
+                if (prediction.class === 'person') {
+                    const box = prediction.bbox;
+                    const isAuthorized = isInsideForbiddenZone(box, forbiddenZone);
+
+                    const boxColor = isAuthorized ? "#28a745" : "#dc3545"; // سەوز یان سور
+                    const labelText = isAuthorized 
+                        ? `کەسی ڕێگەپێدراوە` 
+                        : `ئاگاداربە! کەس دیاریکرا`;
+
+                    // کێشانی بۆکس
+                    ctx.strokeStyle = boxColor;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(box[0], box[1], box[2], box[3]);
+
+                    // کێشانی باکگراوندی دەق
+                    ctx.fillStyle = boxColor;
+                    ctx.font = "bold 15px Arial";
+                    const textWidth = ctx.measureText(labelText).width;
+                    const textY = box[1] > 22 ? box[1] - 22 : box[1];
+
+                    ctx.fillRect(box[0], textY, textWidth + 10, 22);
+
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillText(labelText, box[0] + 5, textY + 16);
+
+                    // ئەگەر لە دەرەوەی ناوچەی ڕێگەپێدراو بوو، ئامادەی بکە بۆ ناردنی تەلەگرام
+                    if (!isAuthorized) {
+                        triggerTelegram = true;
+                    }
+                }
+            });
+
+            // کێشانی وێنە و ناردنی بۆ تەلەگرام کاتێک کەسێک لە شوێنی مەترسییە
+            if (triggerTelegram) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(video, 0, 0);
+                tempCtx.drawImage(canvas, 0, 0);
+
+                sendTelegramPhoto(tempCanvas.toDataURL('image/jpeg'));
+            }
+
+            requestAnimationFrame(detectObjects);
+        }
+
+        async function main() {
+            statusText.innerText = "کۆنترۆڵکردنی کامێرا...";
+            await setupCamera();
+
+            statusText.innerText = "بارکردنی مۆدێلی زانیاری (AI)...";
+            model = await cocoSsd.load();
+
+            statusText.innerText = "سیستەمەکە بە سەرکەوتوویی چالاک بوو ✅";
+            detectObjects();
+        }
+
+        main();
+    </script>
+</body>
+</html>
     </script>
 </body>
 </html>
