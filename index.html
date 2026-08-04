@@ -877,99 +877,82 @@ function setENHANCERestrictedZone() {
 }
 
 window.addEventListener("load", setENHANCERestrictedZone);
-   // ==========================================
-// INTEGRATED SMART ZONE + FACE SYSTEM
+ // ==========================================
+// SMART ZONE FILTER (BLOCK ALARM FOR OWNER)
 // ==========================================
 
-let ownerFaceCanvas = null;
 let isOwnerSaved = false;
+let ownerImageData = null;
 
-// 1. دروستکردنی دوگمەی تۆمارکردنی دەموچاو
+// 1. ڕێکخستنی دوگمەی تۆمارکردنی دەموچاو
 window.addEventListener("load", () => {
   if (document.getElementById("btnSaveMyFace")) return;
 
   const btn = document.createElement("button");
   btn.id = "btnSaveMyFace";
   btn.innerHTML = "📸 تۆمارکردنی دەموچاوی خۆم";
-  btn.style.cssText = "position: fixed; bottom: 25px; left: 25px; z-index: 99999; padding: 12px 22px; background: #0284c7; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4);";
-  
+  btn.style.cssText = "position: fixed; bottom: 20px; left: 20px; z-index: 999999; padding: 14px 24px; background: #0284c7; color: #ffffff; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);";
+
   btn.onclick = () => {
     const video = document.querySelector("video");
     if (!video || video.readyState !== 4) {
-      alert("تکایە بوەستە تا کامێراکە بە تەواوی روون دەبێتەوە!");
+      alert("تکایە بوەستە تا کامێراکە بە تەواوی ڕوون دەبێتەوە!");
       return;
     }
 
-    ownerFaceCanvas = document.createElement("canvas");
-    ownerFaceCanvas.width = video.videoWidth || 640;
-    ownerFaceCanvas.height = video.videoHeight || 480;
-    const ctx = ownerFaceCanvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, ownerFaceCanvas.width, ownerFaceCanvas.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = 160;
+    canvas.height = 120;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, 160, 120);
 
+    ownerImageData = ctx.getImageData(0, 0, 160, 120).data;
     isOwnerSaved = true;
+
     btn.innerHTML = "✅ دەموچاوت تۆمارکرا";
     btn.style.background = "#16a34a";
-    alert("دەموچاوی خۆت بە سەرکەوتوویی تۆمارکرا! لەمەودوا چوونی تۆ بۆ ناوچەی قەدەخەکراو ئەلارم لێنادات.");
+    alert("دەموچاوت تۆمارکرا! لەمەودوا ئەگەر بچیتە ناوچەی قەدەخەکراوەوە وێنەت ناگیرێت.");
   };
 
   document.body.appendChild(btn);
+  overrideAlertSystem();
 });
 
-// 2. فەنکشنی ڕێگریکردن لە ئەلارمی ناوچەی قەدەخەکراو بۆ خاوەن سیستەمەکە
-function checkRestrictedZoneSmart(targetBox, zoneBox) {
-  const video = document.querySelector("video");
-  if (!video || video.readyState !== 4) return;
+// 2. دەستکاری سێنتراڵی ئاگادارییەکان بۆ پەکخستنی ئەلارمی خۆت
+function overrideAlertSystem() {
+  const originalHandleAlerts = window.handleAlerts;
 
-  // هەڵسەنگاندنی ئەوەی ئایا ئامانجەکە چۆتە ناو ناوچەی قەدەخەکراوەوە
-  const targetX2 = targetBox[0] + targetBox[2];
-  const targetY2 = targetBox[1] + targetBox[3];
-  const zoneX2 = zoneBox.x + zoneBox.width;
-  const zoneY2 = zoneBox.y + zoneBox.height;
+  window.handleAlerts = function(message, type) {
+    const video = document.querySelector("video");
 
-  const isInZone = !(targetX2 < zoneBox.x || targetBox[0] > zoneX2 || targetY2 < zoneBox.y || targetBox[1] > zoneY2);
-
-  if (isInZone) {
-    // ئەگەر دەموچاوت تۆمار کردبێت، سیستەمەکە بەراوردت دەکات
-    if (isOwnerSaved && ownerFaceCanvas) {
+    // ئەگەر دەموچاوت تۆمار کردبێت و ڕووداوەکە لە ناوچەی قەدەخەکراو یان کەس بێت
+    if (isOwnerSaved && ownerImageData && video && video.readyState === 4) {
       const currentCanvas = document.createElement("canvas");
-      currentCanvas.width = video.videoWidth || 640;
-      currentCanvas.height = video.videoHeight || 480;
+      currentCanvas.width = 160;
+      currentCanvas.height = 120;
       const ctx = currentCanvas.getContext("2d");
-      ctx.drawImage(video, 0, 0, currentCanvas.width, currentCanvas.height);
+      ctx.drawImage(video, 0, 0, 160, 120);
+      const currentData = ctx.getImageData(0, 0, 160, 120).data;
 
-      const diff = compareFrames(ownerFaceCanvas, currentCanvas);
+      // بەراوردکردنی ڕووکاری ئێستای کامێراکە لەگەڵ دەموچاوە تۆمارکراوەکە
+      let diff = 0;
+      for (let i = 0; i < currentData.length; i += 16) {
+        diff += Math.abs(currentData[i] - ownerImageData[i]);
+      }
+      let avgDiff = diff / (currentData.length / 16);
 
-      // ئەگەر خۆت بوویت (جیاوازی کەم بوو)، ئاگاداری بلۆک دەکات
-      if (diff < 32) {
-        console.log("✅ خاوەنی سیستەم لە ناوچەی قەدەخەکراوە - ئەلارم ڕاگیرا.");
-        return false; 
+      // ئەگەر خۆت بوویت (چوونیەک بوون) -> ناردنی وێنە و ئەلارم بوەستێنە!
+      if (avgDiff < 35) {
+        console.log("🛑 ئاگاداری ڕاگێرا: خۆتیت کە لە بەردەم کامێراکە یان ناوچەی قەدەخەکراویت.");
+        return; 
       }
     }
 
-    // ئەگەر کەسێکی نەناسراو بوو یان دەموچاو تۆمار نەکرابوو -> ئاگاداری دەنێرێت
-    console.warn("🚨 کەسێکی نەناسراو لە ناوچەی قەدەخەکراوە!");
-    return true;
-  }
-
-  return false;
-}
-
-// بەراوردکاری فریمەکان
-function compareFrames(canvas1, canvas2) {
-  const ctx1 = canvas1.getContext("2d");
-  const ctx2 = canvas2.getContext("2d");
-  const data1 = ctx1.getImageData(0, 0, canvas1.width, canvas1.height).data;
-  const data2 = ctx2.getImageData(0, 0, canvas2.width, canvas2.height).data;
-
-  let totalDiff = 0, count = 0;
-  for (let i = 0; i < data1.length; i += 32) {
-    let diffR = Math.abs(data1[i] - data2[i]);
-    let diffG = Math.abs(data1[i+1] - data2[i+1]);
-    let diffB = Math.abs(data1[i+2] - data2[i+2]);
-    totalDiff += (diffR + diffG + diffB) / 3;
-    count++;
-  }
-  return totalDiff / count;
+    // ئەگەر کەسێکی تر بوو -> کۆدی ڕەسەنی ئاگادارکردنەوە و ناردنی وێنە ئیش بکات
+    if (typeof originalHandleAlerts === 'function') {
+      originalHandleAlerts(message, type);
+    }
+  };
 }
     </script>
 </body>
