@@ -877,97 +877,92 @@ function setENHANCERestrictedZone() {
 }
 
 window.addEventListener("load", setENHANCERestrictedZone);
-        // ==========================================
-// EASY FACE CAPTURE & RECOGNITION (بێ پێویستی بە لینک)
+    // ==========================================
+// EASY & LIGHTWEIGHT FACE RECOGNITION
 // ==========================================
 
-let myFaceMatcher = null;
+let ownerFaceCanvas = null;
+let isOwnerSaved = false;
 
-// 1. بارکردنی کتێبخانەی دەموچاو
-(function loadFaceApiScript() {
-  const script = document.createElement("script");
-  script.src = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js";
-  script.onload = () => {
-    initFaceApiModels();
-  };
-  document.head.appendChild(script);
-})();
-
-async function initFaceApiModels() {
-  try {
-    const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model";
-    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    console.log("✅ مۆدێلەکانی دەموچاو بارکران");
-    createCaptureButton();
-  } catch (err) {
-    console.log("کێشە لە بارکردنی مۆدێلەکە:", err);
-  }
-}
-
-// 2. دروستکردنی دوگمەیەک لەسەر شاشەکە بۆ تۆمارکردنی دەموچاو
-function createCaptureButton() {
-  if (document.getElementById("btnCaptureFace")) return;
+// 1. دروستکردنی دوگمەی تۆمارکردنی دەموچاو لەسەر شاشەکە
+window.addEventListener("load", () => {
+  if (document.getElementById("btnSaveMyFace")) return;
 
   const btn = document.createElement("button");
-  btn.id = "btnCaptureFace";
-  btn.innerText = "📸 تۆمارکردنی دەموچاوی خۆم";
-  btn.style.cssText = "position: fixed; bottom: 20px; left: 20px; z-index: 9999; padding: 12px 20px; background: #008cba; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3);";
+  btn.id = "btnSaveMyFace";
+  btn.innerHTML = "📸 تۆمارکردنی دەموچاوی خۆم";
+  btn.style.cssText = "position: fixed; bottom: 25px; left: 25px; z-index: 99999; padding: 12px 22px; background: #0284c7; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); display: block !important;";
   
-  btn.onclick = async () => {
+  btn.onclick = () => {
     const video = document.querySelector("video");
-    if (!video) return alert("کامێراکە چالاک نییە!");
-
-    btn.innerText = "⏳ لە حاڵەتی شیکاریکردندایە...";
-    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-
-    if (detection) {
-      const labeledDescriptor = new faceapi.LabeledFaceDescriptors("Owner", [detection.descriptor]);
-      myFaceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
-      btn.innerText = "✅ دەموچاوت تۆمارکرا!";
-      btn.style.background = "#4CAF50";
-      alert("دەموچاوت بە سەرکەوتوویی ناسێنرا! لەمەودوا ئەگەر بێیتە بەر کامێراکە ئەلارم لێنادات.");
-    } else {
-      btn.innerText = "📸 تۆمارکردنی دەموچاوی خۆم";
-      alert("❌ هیچ دەموچاوێک لە بەردەم کامێراکە نادۆزرایەوە، تکایە ڕاستەوخۆ بەرامبەر کامێراکە بوەستە و دووبارەی بکەرەوە.");
+    if (!video || video.readyState !== 4) {
+      alert("تکایە بوەستە تا کامێراکە بە تەواوی ڕوون دەبێتەوە!");
+      return;
     }
+
+    // پاشەکەوتکردنی وێنەی ئێستای دەموچاوت
+    ownerFaceCanvas = document.createElement("canvas");
+    ownerFaceCanvas.width = video.videoWidth || 640;
+    ownerFaceCanvas.height = video.videoHeight || 480;
+    const ctx = ownerFaceCanvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, ownerFaceCanvas.width, ownerFaceCanvas.height);
+
+    isOwnerSaved = true;
+    btn.innerHTML = "✅ دەموچاوت تۆمارکرا";
+    btn.style.background = "#16a34a";
+    alert("دەموچاوی خۆت بە سەرکەوتوویی تۆمارکرا! ئێستا کاتێک کەسێکی تر بێتە بەر کامێراکە ئەلارم لێدەدات.");
   };
 
   document.body.appendChild(btn);
-  startFaceMonitoring();
-}
+  startFaceChecker();
+});
 
-// 3. پشکنینی بەردەوامی دەموچاوەکان
-function startFaceMonitoring() {
+// 2. پشکنینی ڕاستەوخۆ بۆ کەسی نەناسراو
+function startFaceChecker() {
   const video = document.querySelector("video");
-  setInterval(async () => {
-    if (video && video.readyState === 4 && typeof faceapi !== 'undefined') {
-      const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
 
-      if (detections.length > 0) {
-        detections.forEach(detection => {
-          let identity = "Unknown";
+  setInterval(() => {
+    if (!video || video.readyState !== 4 || !isOwnerSaved) return;
 
-          if (myFaceMatcher) {
-            const match = myFaceMatcher.findBestMatch(detection.descriptor);
-            identity = match.label;
-          }
+    const currentCanvas = document.createElement("canvas");
+    currentCanvas.width = video.videoWidth || 640;
+    currentCanvas.height = video.videoHeight || 480;
+    const ctx = currentCanvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, currentCanvas.width, currentCanvas.height);
 
-          // ئەگەر کەسەکە نەناسراو بوو -> ئەلارم لێدەدات
-          if (identity === "unknown" || identity.includes("unknown")) {
-            console.warn("🚨 کەسێکی نەناسراو لە بەردەم کامێرا بەدیکرا!");
-            if (typeof handleAlerts === 'function') {
-              handleAlerts("🚨 ئاگاداری: دەموچاوێکی نەناسراو بینرا!", "face");
-            }
-          } else {
-            // ئەگەر خۆت بوویت (Owner) -> بێدەنگ دەبێت
-            console.log("✅ خاوەنی سیستەمەکە (Owner) بینرا.");
-          }
-        });
+    // بەراوردکردنی جیاوازی هەردوو فریمەکە
+    const diff = getFrameDifference(ownerFaceCanvas, currentCanvas);
+
+    // ئەگەر کەسێکی تر بێتە ناو کادرەکە و شێوازی فریمەکە زۆر بگوڕێت
+    if (diff > 35) { 
+      console.warn("🚨 کەسێکی نەناسراو بەدیکرا!");
+      if (typeof handleAlerts === 'function') {
+        handleAlerts("🚨 ئاگاداری: دەموچاو یان کەسێکی نەناسراو بینرا!", "face");
       }
     }
-  }, 1500);
+  }, 2000);
+}
+
+// فەنکشنی بەراوردکردنی ڕووکاری وێنەکان
+function getFrameDifference(canvas1, canvas2) {
+  const ctx1 = canvas1.getContext("2d");
+  const ctx2 = canvas2.getContext("2d");
+  const data1 = ctx1.getImageData(0, 0, canvas1.width, canvas1.height).data;
+  const data2 = ctx2.getImageData(0, 0, canvas2.width, canvas2.height).data;
+
+  let totalDiff = 0;
+  let count = 0;
+
+  for (let i = 0; i < data1.length; i += 32) {
+    let diffR = Math.abs(data1[i] - data2[i]);
+    let diffG = Math.abs(data1[i+1] - data2[i+1]);
+    let diffB = Math.abs(data1[i+2] - data2[i+2]);
+    
+    totalDiff += (diffR + diffG + diffB) / 3;
+    count++;
+  }
+
+  return totalDiff / count;
 }
     </script>
 </body>
