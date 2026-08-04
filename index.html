@@ -851,6 +851,32 @@ function setupLicensePlateReader() {
 
 // چالاککردن لەگەڵ باربوونی لاپەڕەکە
 window.addEventListener("load", setupLicensePlateReader);
+        // ==========================================
+// HIGH-ACCURACY RESTRICTED ZONE ENGINE
+// ==========================================
+function setENHANCERestrictedZone() {
+  // بەکارهێنانی پشکنینی ئاستی داپۆشین (Overlap Detection)
+  window.checkZoneOverlap = function(targetBox, zoneBox) {
+    // targetBox: [x, y, width, height]
+    const targetX2 = targetBox[0] + targetBox[2];
+    const targetY2 = targetBox[1] + targetBox[3];
+    
+    const zoneX2 = zoneBox.x + zoneBox.width;
+    const zoneY2 = zoneBox.y + zoneBox.height;
+
+    // پشکنینی ئەوەی ئایا هیچ بەشێکی ئامانجەکە چۆتە ناو ناوچەکەوە
+    const isOverlapping = !(
+      targetX2 < zoneBox.x ||
+      targetBox[0] > zoneX2 ||
+      targetY2 < zoneBox.y ||
+      targetBox[1] > zoneY2
+    );
+
+    return isOverlapping;
+  };
+}
+
+window.addEventListener("load", setENHANCERestrictedZone);
     </script>
 </body>
 </html>
