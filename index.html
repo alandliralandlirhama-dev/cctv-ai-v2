@@ -775,48 +775,47 @@ function sendTelegramMessage(chatId, token, msg) {
 
 // پشکنین هەر 3 چەرکە جارێک
 setInterval(checkTelegramCommands, 3000);
-        // ==========================================
-// SMOKE & SHISHA DETECTION ENHANCEMENT
+   // ==========================================
+// INTEGRATED AI SMOKE DETECTOR (نوێکراوە)
 // ==========================================
-function enableShishaSmokeDetection() {
-  if (typeof confidenceThreshold !== 'undefined') {
-    confidenceThreshold = 0.35;
-  }
-
+async function setupSmokeDetectionAI() {
   const video = document.querySelector("video");
   if (!video) return;
 
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-
   setInterval(() => {
     if (video.readyState === 4) {
+      const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      let whitePixelCount = 0;
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let whiteCount = 0;
 
+      // گەڕان بەدوای چڕیی دووکەڵ یان تەم و هەڵمدا
       for (let i = 0; i < data.length; i += 16) {
         let r = data[i];
-        let g = data[i + 1];
-        let b = data[i + 2];
+        let g = data[i+1];
+        let b = data[i+2];
 
-        if (r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 15 && Math.abs(g - b) < 15) {
-          whitePixelCount++;
+        // دەستنیشانکردنی ڕەنگی سپی/ڕەساسی دووکەڵی نێرگەلە
+        if (r > 170 && g > 170 && b > 170 && Math.abs(r - g) < 15 && Math.abs(g - b) < 15) {
+          whiteCount++;
         }
       }
 
-      if (whitePixelCount > (data.length / 16) * 0.12) {
-        console.warn("🚨 دووکەڵ یان هەڵمی نێرگەلە بەدیکرا!");
+      // ئەگەر ڕێژەی دووکەڵ گەیشتە زیاتر لە 5%ی کامێراکە
+      if (whiteCount > (data.length / 16) * 0.05) {
+        if (typeof handleAlerts === 'function') {
+          handleAlerts("🚨 دووکەڵ یان نێرگەلە بەدیکرا!", "smoke");
+        }
       }
     }
-  }, 1500);
+  }, 1000);
 }
 
-window.addEventListener("load", enableShishaSmokeDetection);
+window.addEventListener("load", setupSmokeDetectionAI);
     </script>
 </body>
 </html>
